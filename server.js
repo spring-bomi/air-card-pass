@@ -10,8 +10,9 @@ app.use(express.static('public'));
 
 let players = []; 
 let playerNames = {}; 
-let currentBombHolder = null; // ⭐ 현재 폭탄을 들고 있는 사람의 ID를 추적
+let currentBombHolder = null; 
 let timerInterval = null;
+let lastThrowTime = 0; // ⭐ 추가: 따닥(더블터치) 방지용 쿨타임 기록
 
 io.on('connection', (socket) => {
     players.push(socket.id);
@@ -39,7 +40,6 @@ io.on('connection', (socket) => {
         const realPlayers = players.filter(id => playerNames[id] !== 'DISPLAY' && playerNames[id] !== '대기중...');
 
         if (realPlayers.length > 0) {
-            // ⭐ 첫 번째 사람에게 폭탄을 주고 누군지 기록해둠
             currentBombHolder = realPlayers[0]; 
             io.to(currentBombHolder).emit('receiveBomb');
         }
@@ -52,34 +52,44 @@ io.on('connection', (socket) => {
 
             if (timeLeft <= 0) {
                 clearInterval(timerInterval);
-                currentBombHolder = null; // 게임 끝나면 초기화
+                currentBombHolder = null; 
                 io.emit('explode'); 
             }
         }, 1000);
     });
 
     socket.on('throwBomb', () => {
+        // ⭐ [핵심 방어 1] 내 손에 진짜 폭탄이 쥐어져 있을 때만 던질 수 있음 (서버 꼬임 완벽 차단)
+        if (socket.id !== currentBombHolder) return;
+
+        // ⭐ [핵심 방어 2] 0.3초 이내에 연속으로 발생한 요청 무시 (다급한 더블 스와이프 무시)
+        const now = Date.now();
+        if (now - lastThrowTime < 300) return;
+        lastThrowTime = now;
+
         const realPlayers = players.filter(id => playerNames[id] !== 'DISPLAY' && playerNames[id] !== '대기중...');
-        if (realPlayers.length > 0) {
-            // ⭐ 현재 폭탄을 든 사람의 위치를 찾아서 다음 사람에게 정확히 전달
+        
+        if (realPlayers.length > 1) {
             let currentIndex = realPlayers.indexOf(currentBombHolder);
             if (currentIndex === -1) currentIndex = 0; 
             
             let nextIndex = (currentIndex + 1) % realPlayers.length;
-            currentBombHolder = realPlayers[nextIndex]; // 새 주인 기록
+            currentBombHolder = realPlayers[nextIndex]; 
+            io.to(currentBombHolder).emit('receiveBomb');
+        } else if (realPlayers.length === 1) {
+            // 혼자 남았을 때 던지면 그대로 다시 자기 자신에게 돌아옴
             io.to(currentBombHolder).emit('receiveBomb');
         }
     });
 
     socket.on('disconnect', () => {
-        // ⭐ 나간 사람이 하필 '폭탄을 쥐고 있던 사람'인지 확인
         const wasBombHolder = (socket.id === currentBombHolder); 
         
         players = players.filter(id => id !== socket.id);
         delete playerNames[socket.id];
         broadcastPlayerList(); 
 
-        // ⭐ 폭탄을 든 채로 도망갔다면? 남아있는 사람 중 1번에게 폭탄을 강제 배송!
+        // 폭탄을 든 사람이 나가버렸을 때 남은 사람에게 강제 할당
         if (wasBombHolder && timerInterval) {
             const realPlayers = players.filter(id => playerNames[id] !== 'DISPLAY' && playerNames[id] !== '대기중...');
             if (realPlayers.length > 0) {
