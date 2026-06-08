@@ -12,7 +12,8 @@ let players = [];
 let playerNames = {}; 
 let currentBombHolder = null; 
 let timerInterval = null;
-let lastThrowTime = 0; // ⭐ 추가: 따닥(더블터치) 방지용 쿨타임 기록
+let lastThrowTime = 0; 
+let isPlaying = false; // ⭐ [핵심 방어막] 게임 진행 상태를 잠그는 변수 추가
 
 io.on('connection', (socket) => {
     players.push(socket.id);
@@ -36,6 +37,7 @@ io.on('connection', (socket) => {
     socket.on('startGame', () => {
         if (players.length === 0) return; 
         let timeLeft = 30; 
+        isPlaying = true; // ⭐ 게임 시작 시 자물쇠 해제!
         
         const realPlayers = players.filter(id => playerNames[id] !== 'DISPLAY' && playerNames[id] !== '대기중...');
 
@@ -52,17 +54,17 @@ io.on('connection', (socket) => {
 
             if (timeLeft <= 0) {
                 clearInterval(timerInterval);
-                currentBombHolder = null; 
+                isPlaying = false; // ⭐ 0초가 되는 순간 자물쇠 철컥! (이후 조작 불가)
                 io.emit('explode'); 
+                currentBombHolder = null; 
             }
         }, 1000);
     });
 
     socket.on('throwBomb', () => {
-        // ⭐ [핵심 방어 1] 내 손에 진짜 폭탄이 쥐어져 있을 때만 던질 수 있음 (서버 꼬임 완벽 차단)
-        if (socket.id !== currentBombHolder) return;
+        if (!isPlaying) return; // ⭐ [핵심 방어 1] 터진 이후에는 던지기 신호 무조건 무시!
+        if (socket.id !== currentBombHolder) return; 
 
-        // ⭐ [핵심 방어 2] 0.3초 이내에 연속으로 발생한 요청 무시 (다급한 더블 스와이프 무시)
         const now = Date.now();
         if (now - lastThrowTime < 300) return;
         lastThrowTime = now;
@@ -77,7 +79,6 @@ io.on('connection', (socket) => {
             currentBombHolder = realPlayers[nextIndex]; 
             io.to(currentBombHolder).emit('receiveBomb');
         } else if (realPlayers.length === 1) {
-            // 혼자 남았을 때 던지면 그대로 다시 자기 자신에게 돌아옴
             io.to(currentBombHolder).emit('receiveBomb');
         }
     });
@@ -89,8 +90,7 @@ io.on('connection', (socket) => {
         delete playerNames[socket.id];
         broadcastPlayerList(); 
 
-        // 폭탄을 든 사람이 나가버렸을 때 남은 사람에게 강제 할당
-        if (wasBombHolder && timerInterval) {
+        if (isPlaying && wasBombHolder && timerInterval) { // ⭐ 게임 진행 중일 때만 강제 할당
             const realPlayers = players.filter(id => playerNames[id] !== 'DISPLAY' && playerNames[id] !== '대기중...');
             if (realPlayers.length > 0) {
                 currentBombHolder = realPlayers[0]; 
