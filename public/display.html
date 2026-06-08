@@ -48,7 +48,12 @@
             playerTags.innerHTML = list.map(name => `<div class="name-tag">${name}</div>`).join('');
         });
 
+        // ⭐ [수정된 부분] 0명일 때 시작 방지 로직 추가
         startBtn.addEventListener('click', () => {
+            if (playerTags.children.length === 0) {
+                alert("입장한 플레이어가 없습니다!\n최소 1명 이상 접속한 후에 시작해주세요.");
+                return;
+            }
             socket.emit('startGame');
             startBtn.style.display = 'none';
         });
