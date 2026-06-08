@@ -38,6 +38,7 @@ io.on('connection', (socket) => {
 
     // 전광판에서 '게임 시작' 버튼을 눌렀을 때
     socket.on('startGame', () => {
+        if (Object.keys(players).length === 0) return;
         let timeLeft = 30; // 30초 타이머
         
         // 폭탄을 돌릴 진짜 플레이어들만 추려냄
