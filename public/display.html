@@ -5,18 +5,24 @@
     <title>메인 전광판 - 에어 카드 패스</title>
     <style>
         body { background-color: #111; color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: sans-serif; overflow: hidden; }
+        
+        /* 추가된 접속 인원 표시 스타일 */
+        #playerCount { position: absolute; top: 20px; font-size: 24px; color: #2ecc71; font-weight: bold; }
+        
         #timer {
             font-size: 15rem;
             font-weight: bold;
             transition: opacity 2s ease, color 1s ease, transform 0.5s ease;
         }
-        .blind { opacity: 0; } /* 블라인드 처리 (안 보임) */
-        .danger { opacity: 1 !important; color: #ff3333; transform: scale(1.2); } /* 3초 남았을 때 나타남 */
+        .blind { opacity: 0; } 
+        .danger { opacity: 1 !important; color: #ff3333; transform: scale(1.2); } 
         #startBtn { padding: 15px 30px; font-size: 24px; cursor: pointer; margin-bottom: 50px; background-color: #3498db; color: white; border: none; border-radius: 10px; font-weight: bold; }
         #startBtn:hover { background-color: #2980b9; }
     </style>
 </head>
 <body>
+
+    <div id="playerCount">현재 접속: 0명 대기 중</div>
 
     <button id="startBtn">게임 시작</button>
     <div id="timer">30</div>
@@ -26,6 +32,15 @@
         const socket = io();
         const timerDiv = document.getElementById('timer');
         const startBtn = document.getElementById('startBtn');
+        const countDiv = document.getElementById('playerCount');
+
+        // 서버로부터 접속자 수 업데이트 받기
+        socket.on('updatePlayers', (count) => {
+            // 전광판(디스플레이) 자신도 1명으로 카운트되므로 1을 빼줍니다.
+            let actualPlayers = count - 1; 
+            if(actualPlayers < 0) actualPlayers = 0;
+            countDiv.innerText = `현재 접속 플레이어: ${actualPlayers}명`;
+        });
 
         startBtn.addEventListener('click', () => {
             socket.emit('startGame');
@@ -35,11 +50,9 @@
         socket.on('timerUpdate', (timeLeft) => {
             timerDiv.innerText = timeLeft;
 
-            // 25초 남았을 때 (시작 후 5초 뒤) 블라인드 처리 시작
             if (timeLeft <= 25 && timeLeft > 3) {
                 timerDiv.classList.add('blind');
             } 
-            // 3초 남았을 때 서서히 붉은색으로 나타남
             else if (timeLeft <= 3 && timeLeft > 0) {
                 timerDiv.classList.remove('blind');
                 timerDiv.classList.add('danger');
@@ -53,7 +66,7 @@
             timerDiv.style.color = "orange";
             
             setTimeout(() => {
-                startBtn.style.display = 'block'; // 게임 재시작 버튼 표시
+                startBtn.style.display = 'block'; 
                 timerDiv.innerText = "30";
                 timerDiv.style.fontSize = "15rem";
                 timerDiv.style.color = "white";
