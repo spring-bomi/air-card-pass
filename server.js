@@ -8,59 +8,74 @@ const io = new Server(server);
 
 app.use(express.static('public'));
 
-let players = [];
+let players = []; // 접속한 모든 기기의 socket.id
+let playerNames = {}; // 각 기기의 닉네임 저장소
 let hasBombIndex = 0;
 let timerInterval = null;
 
 io.on('connection', (socket) => {
-    console.log('플레이어 접속:', socket.id);
     players.push(socket.id);
+    playerNames[socket.id] = "대기중...";
 
-    // 전체 플레이어 수 업데이트
-    io.emit('updatePlayers', players.length);
+    // 1. 플레이어가 스마트폰에서 닉네임을 입력했을 때
+    socket.on('setNickname', (nickname) => {
+        playerNames[socket.id] = nickname;
+        broadcastPlayerList();
+    });
 
-    // 디스플레이 화면에서 '게임 시작' 버튼을 눌렀을 때
+    // 2. 전광판이 접속했을 때 (닉네임을 'DISPLAY'로 지정해 플레이어와 구분)
+    socket.on('registerDisplay', () => {
+        playerNames[socket.id] = 'DISPLAY';
+        broadcastPlayerList();
+    });
+
+    // 전체 전광판에 현재 접속한 플레이어 닉네임 명단 쏘기
+    function broadcastPlayerList() {
+        // 'DISPLAY'가 아닌 진짜 플레이어들의 닉네임만 모아서 배열로 만듦
+        const list = players.map(id => playerNames[id]).filter(name => name !== 'DISPLAY' && name !== '대기중...');
+        io.emit('updatePlayerList', list);
+    }
+
+    // 전광판에서 '게임 시작' 버튼을 눌렀을 때
     socket.on('startGame', () => {
-        let timeLeft = 30; // 전체 30초
+        let timeLeft = 30; // 30초 타이머
         
-        // 첫 번째 사람에게 폭탄 지급 (0번은 디스플레이 기기라고 가정, 1번부터 플레이어)
-        if (players.length > 1) {
-            hasBombIndex = 1;
-            io.to(players[hasBombIndex]).emit('receiveBomb');
-        } else if (players.length === 1) {
-            // 1명만 접속해서 테스트할 때를 위한 예외 처리
-            hasBombIndex = 0;
-            io.to(players[hasBombIndex]).emit('receiveBomb');
+        // 폭탄을 돌릴 진짜 플레이어들만 추려냄
+        const realPlayers = players.filter(id => playerNames[id] !== 'DISPLAY' && playerNames[id] !== '대기중...');
+
+        // 플레이어가 1명 이상일 때 첫 번째 사람에게 폭탄 지급
+        if (realPlayers.length > 0) {
+            hasBombIndex = 0; 
+            io.to(realPlayers[hasBombIndex]).emit('receiveBomb');
         }
 
         if (timerInterval) clearInterval(timerInterval);
         
         timerInterval = setInterval(() => {
             timeLeft--;
-            io.emit('timerUpdate', timeLeft); // 모든 기기에 남은 시간 전송
+            io.emit('timerUpdate', timeLeft);
 
             if (timeLeft <= 0) {
                 clearInterval(timerInterval);
-                io.emit('explode'); // 폭탄 폭발 이벤트!
+                io.emit('explode'); // 폭탄 폭발!
             }
         }, 1000);
     });
 
+    // 누군가 폭탄을 오른쪽으로 던졌을 때
     socket.on('throwBomb', () => {
-        const currentIndex = players.indexOf(socket.id);
-        if (currentIndex !== -1 && players.length > 0) {
-            hasBombIndex = (currentIndex + 1) % players.length;
-            // 만약 다음 사람이 디스플레이(0번)라면 한 번 더 건너뜀 (플레이어가 여러 명일 때)
-            if (hasBombIndex === 0 && players.length > 1) {
-                hasBombIndex = 1;
-            }
-            io.to(players[hasBombIndex]).emit('receiveBomb');
+        const realPlayers = players.filter(id => playerNames[id] !== 'DISPLAY' && playerNames[id] !== '대기중...');
+        if (realPlayers.length > 0) {
+            // 다음 사람 계산
+            hasBombIndex = (hasBombIndex + 1) % realPlayers.length;
+            io.to(realPlayers[hasBombIndex]).emit('receiveBomb');
         }
     });
 
     socket.on('disconnect', () => {
         players = players.filter(id => id !== socket.id);
-        console.log('플레이어 퇴장:', socket.id);
+        delete playerNames[socket.id];
+        broadcastPlayerList(); // 누군가 나가면 명단 새로고침
     });
 });
 
