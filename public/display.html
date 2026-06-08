@@ -6,25 +6,28 @@
     <style>
         body { background-color: #111; color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: sans-serif; overflow: hidden; }
         
-        /* 추가된 접속 인원 표시 스타일 */
-        #playerCount { position: absolute; top: 20px; font-size: 24px; color: #2ecc71; font-weight: bold; }
-        
-        #timer {
-            font-size: 15rem;
-            font-weight: bold;
-            transition: opacity 2s ease, color 1s ease, transform 0.5s ease;
-        }
+        /* 닉네임 리스트 표시 영역 */
+        #playerListWrapper { position: absolute; top: 30px; width: 90%; text-align: center; }
+        #playerCountTitle { font-size: 24px; color: #f1c40f; margin-bottom: 15px; font-weight: bold; }
+        #playerTags { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+        .name-tag { background-color: #3498db; padding: 8px 15px; border-radius: 20px; font-size: 18px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+
+        #timer { font-size: 15rem; font-weight: bold; transition: opacity 2s ease, color 1s ease, transform 0.5s ease; margin-top: 50px; }
         .blind { opacity: 0; } 
         .danger { opacity: 1 !important; color: #ff3333; transform: scale(1.2); } 
-        #startBtn { padding: 15px 30px; font-size: 24px; cursor: pointer; margin-bottom: 50px; background-color: #3498db; color: white; border: none; border-radius: 10px; font-weight: bold; }
-        #startBtn:hover { background-color: #2980b9; }
+        
+        #startBtn { padding: 15px 40px; font-size: 26px; cursor: pointer; background-color: #e74c3c; color: white; border: none; border-radius: 10px; font-weight: bold; box-shadow: 0 5px 15px rgba(231, 76, 60, 0.4); margin-bottom: -50px; z-index: 50;}
+        #startBtn:hover { background-color: #c0392b; }
     </style>
 </head>
 <body>
 
-    <div id="playerCount">현재 접속: 0명 대기 중</div>
+    <div id="playerListWrapper">
+        <div id="playerCountTitle">현재 접속 인원: 0명</div>
+        <div id="playerTags"></div>
+    </div>
 
-    <button id="startBtn">게임 시작</button>
+    <button id="startBtn">🚨 게임 시작 🚨</button>
     <div id="timer">30</div>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -32,14 +35,17 @@
         const socket = io();
         const timerDiv = document.getElementById('timer');
         const startBtn = document.getElementById('startBtn');
-        const countDiv = document.getElementById('playerCount');
+        const playerCountTitle = document.getElementById('playerCountTitle');
+        const playerTags = document.getElementById('playerTags');
 
-        // 서버로부터 접속자 수 업데이트 받기
-        socket.on('updatePlayers', (count) => {
-            // 전광판(디스플레이) 자신도 1명으로 카운트되므로 1을 빼줍니다.
-            let actualPlayers = count - 1; 
-            if(actualPlayers < 0) actualPlayers = 0;
-            countDiv.innerText = `현재 접속 플레이어: ${actualPlayers}명`;
+        // 접속하자마자 이 화면은 '전광판(DISPLAY)'이라고 서버에 신고
+        socket.emit('registerDisplay');
+
+        // 플레이어 닉네임 명단 수신
+        socket.on('updatePlayerList', (list) => {
+            playerCountTitle.innerText = `현재 접속 인원: ${list.length}명 대기 중!`;
+            // 배열에 있는 이름들을 예쁜 태그로 만들어 화면에 표시
+            playerTags.innerHTML = list.map(name => `<div class="name-tag">${name}</div>`).join('');
         });
 
         startBtn.addEventListener('click', () => {
