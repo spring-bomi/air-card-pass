@@ -6,14 +6,15 @@
     <style>
         body { background-color: #111; color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: sans-serif; overflow: hidden; }
         
-        /* 닉네임 리스트 표시 영역 */
         #playerListWrapper { position: absolute; top: 30px; width: 90%; text-align: center; }
         #playerCountTitle { font-size: 24px; color: #f1c40f; margin-bottom: 15px; font-weight: bold; }
         #playerTags { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
         .name-tag { background-color: #3498db; padding: 8px 15px; border-radius: 20px; font-size: 18px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
 
-        #timer { font-size: 15rem; font-weight: bold; transition: opacity 2s ease, color 1s ease, transform 0.5s ease; margin-top: 50px; }
-        .blind { opacity: 0; } 
+        #timer { font-size: 15rem; font-weight: bold; transition: color 0.5s ease, transform 0.5s ease; margin-top: 50px; }
+        
+        /* ⭐ 완전히 사라지지 않고 반투명한 노란색으로 변하도록 수정 */
+        .blind { opacity: 0.5; color: #f1c40f; text-shadow: 0 0 20px #f1c40f; } 
         .danger { opacity: 1 !important; color: #ff3333; transform: scale(1.2); } 
         
         #startBtn { padding: 15px 40px; font-size: 26px; cursor: pointer; background-color: #e74c3c; color: white; border: none; border-radius: 10px; font-weight: bold; box-shadow: 0 5px 15px rgba(231, 76, 60, 0.4); margin-bottom: -50px; z-index: 50;}
@@ -38,17 +39,13 @@
         const playerCountTitle = document.getElementById('playerCountTitle');
         const playerTags = document.getElementById('playerTags');
 
-        // 접속하자마자 이 화면은 '전광판(DISPLAY)'이라고 서버에 신고
         socket.emit('registerDisplay');
 
-        // 플레이어 닉네임 명단 수신
         socket.on('updatePlayerList', (list) => {
             playerCountTitle.innerText = `현재 접속 인원: ${list.length}명 대기 중!`;
-            // 배열에 있는 이름들을 예쁜 태그로 만들어 화면에 표시
             playerTags.innerHTML = list.map(name => `<div class="name-tag">${name}</div>`).join('');
         });
 
-        // ⭐ [수정된 부분] 0명일 때 시작 방지 로직 추가
         startBtn.addEventListener('click', () => {
             if (playerTags.children.length === 0) {
                 alert("입장한 플레이어가 없습니다!\n최소 1명 이상 접속한 후에 시작해주세요.");
@@ -59,14 +56,19 @@
         });
 
         socket.on('timerUpdate', (timeLeft) => {
-            timerDiv.innerText = timeLeft;
-
+            // ⭐ 타이머 업데이트 로직 수정: 블라인드 구간일 때 물음표 표시
             if (timeLeft <= 25 && timeLeft > 3) {
+                timerDiv.innerText = "???";
                 timerDiv.classList.add('blind');
             } 
             else if (timeLeft <= 3 && timeLeft > 0) {
+                timerDiv.innerText = timeLeft;
                 timerDiv.classList.remove('blind');
                 timerDiv.classList.add('danger');
+            } else {
+                timerDiv.innerText = timeLeft;
+                timerDiv.classList.remove('blind');
+                timerDiv.classList.remove('danger');
             }
         });
 
