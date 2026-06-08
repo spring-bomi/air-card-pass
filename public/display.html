@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>메인 전광판 - 에어 카드 패스</title>
+    <style>
+        body { background-color: #111; color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: sans-serif; overflow: hidden; }
+        #timer {
+            font-size: 15rem;
+            font-weight: bold;
+            transition: opacity 2s ease, color 1s ease, transform 0.5s ease;
+        }
+        .blind { opacity: 0; } /* 블라인드 처리 (안 보임) */
+        .danger { opacity: 1 !important; color: #ff3333; transform: scale(1.2); } /* 3초 남았을 때 나타남 */
+        #startBtn { padding: 15px 30px; font-size: 24px; cursor: pointer; margin-bottom: 50px; background-color: #3498db; color: white; border: none; border-radius: 10px; font-weight: bold; }
+        #startBtn:hover { background-color: #2980b9; }
+    </style>
+</head>
+<body>
+
+    <button id="startBtn">게임 시작</button>
+    <div id="timer">30</div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const timerDiv = document.getElementById('timer');
+        const startBtn = document.getElementById('startBtn');
+
+        startBtn.addEventListener('click', () => {
+            socket.emit('startGame');
+            startBtn.style.display = 'none';
+        });
+
+        socket.on('timerUpdate', (timeLeft) => {
+            timerDiv.innerText = timeLeft;
+
+            // 25초 남았을 때 (시작 후 5초 뒤) 블라인드 처리 시작
+            if (timeLeft <= 25 && timeLeft > 3) {
+                timerDiv.classList.add('blind');
+            } 
+            // 3초 남았을 때 서서히 붉은색으로 나타남
+            else if (timeLeft <= 3 && timeLeft > 0) {
+                timerDiv.classList.remove('blind');
+                timerDiv.classList.add('danger');
+            }
+        });
+
+        socket.on('explode', () => {
+            timerDiv.innerText = "💥펑!!💥";
+            timerDiv.style.fontSize = "10rem";
+            timerDiv.classList.remove('danger');
+            timerDiv.style.color = "orange";
+            
+            setTimeout(() => {
+                startBtn.style.display = 'block'; // 게임 재시작 버튼 표시
+                timerDiv.innerText = "30";
+                timerDiv.style.fontSize = "15rem";
+                timerDiv.style.color = "white";
+            }, 5000);
+        });
+    </script>
+</body>
+</html>
