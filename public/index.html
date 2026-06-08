@@ -6,26 +6,36 @@
     <title>에어 카드 패스 - 플레이어</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #2c3e50; touch-action: none; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; }
+        
+        /* 닉네임 입력 화면 스타일 */
+        #loginScreen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: #34495e; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
+        #nicknameInput { padding: 15px; font-size: 20px; border-radius: 10px; border: none; margin-bottom: 20px; text-align: center; width: 70%; max-width: 300px; font-weight: bold; }
+        #joinBtn { padding: 15px 40px; font-size: 20px; background-color: #e74c3c; color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        
         #bomb {
             width: 150px; height: 220px;
             background: linear-gradient(135deg, #e74c3c, #c0392b);
             border-radius: 15px; position: absolute;
-            display: none; /* 처음엔 숨김 */
+            display: none; 
             box-shadow: 0 10px 20px rgba(0,0,0,0.5);
             transition: transform 0.1s;
             display: flex; justify-content: center; align-items: center;
             color: white; font-size: 24px; font-weight: bold;
             z-index: 10;
         }
-        /* 잡았을 때 (Pinch) 효과 */
         .grabbed { transform: scale(0.9); box-shadow: 0 5px 10px rgba(0,0,0,0.3) !important; }
-        /* 떨어뜨렸을 때 애니메이션 */
         .dropped { transition: top 0.5s ease-in !important; top: 120% !important; }
     </style>
 </head>
 <body>
 
-    <h2 id="status" style="color: white; position: absolute; top: 20px; text-align: center; width: 90%; font-size: 20px;">다른 플레이어가 시작하기를 기다리는 중...</h2>
+    <div id="loginScreen">
+        <h1 style="color: white; margin-bottom: 30px;">에어 카드 패스 💣</h1>
+        <input type="text" id="nicknameInput" placeholder="당신의 이름은?">
+        <button id="joinBtn">입장하기</button>
+    </div>
+
+    <h2 id="status" style="color: white; position: absolute; top: 20px; text-align: center; width: 90%; font-size: 20px;"></h2>
     <div id="bomb">💣 폭탄</div>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -33,12 +43,27 @@
         const socket = io();
         const bomb = document.getElementById('bomb');
         const status = document.getElementById('status');
+        
+        const loginScreen = document.getElementById('loginScreen');
+        const nicknameInput = document.getElementById('nicknameInput');
+        const joinBtn = document.getElementById('joinBtn');
 
         let isDragging = false;
-        let startX, startY, currentX, currentY, startTime;
+        let startX, currentX, startTime;
         let isMyTurn = false;
 
-        // 서버로부터 폭탄을 받았을 때
+        // 입장 버튼 클릭
+        joinBtn.addEventListener('click', () => {
+            const nickname = nicknameInput.value.trim();
+            if(nickname) {
+                socket.emit('setNickname', nickname);
+                loginScreen.style.display = 'none'; // 로그인 화면 숨기기
+                status.innerText = `${nickname}님, 대기 중...`;
+            } else {
+                alert("이름을 꼭 입력해주세요!");
+            }
+        });
+
         socket.on('receiveBomb', () => {
             isMyTurn = true;
             status.innerText = "빨리 옆으로 던지세요!";
@@ -46,39 +71,32 @@
             bomb.style.backgroundColor = "";
             bomb.innerText = "💣 폭탄";
             bomb.style.display = 'flex';
-            bomb.style.left = '-150px'; // 왼쪽 밖에서
+            bomb.style.left = '-150px'; 
             bomb.style.top = '50%';
             bomb.style.transform = 'translateY(-50%)';
             
-            // 날아오는 애니메이션
             setTimeout(() => {
                 bomb.style.transition = 'left 0.3s ease-out';
-                bomb.style.left = 'calc(50% - 75px)'; // 중앙으로
+                bomb.style.left = 'calc(50% - 75px)'; 
             }, 10);
         });
 
-        // 터치 시작 (Pinch)
         bomb.addEventListener('touchstart', (e) => {
             if (!isMyTurn) return;
             isDragging = true;
             bomb.classList.add('grabbed');
-            bomb.style.transition = 'none'; // 드래그 중 애니메이션 끄기
-            
+            bomb.style.transition = 'none'; 
             startX = e.touches[0].clientX;
             startTime = Date.now();
         });
 
-        // 드래그 중 (이동)
         bomb.addEventListener('touchmove', (e) => {
             if (!isDragging) return;
             currentX = e.touches[0].clientX;
             let moveX = currentX - startX;
-            
-            // 카드가 손가락을 따라 이동
             bomb.style.left = `calc(50% - 75px + ${moveX}px)`;
         });
 
-        // 터치 종료 (Swipe 판정)
         bomb.addEventListener('touchend', (e) => {
             if (!isDragging) return;
             isDragging = false;
@@ -87,43 +105,34 @@
             let endTime = Date.now();
             let distanceX = currentX - startX;
             let timeElapsed = endTime - startTime;
-            let velocityX = distanceX / timeElapsed; // X축 이동 속도 계산
+            let velocityX = distanceX / timeElapsed; 
 
-            // 속도가 일정 이상이고(빠르게 스와이프), 오른쪽으로 충분히 던졌을 때 성공
             if (velocityX > 0.5 && distanceX > 80) {
-                // 성공: 오른쪽 화면 밖으로 날아감
                 bomb.style.transition = 'left 0.2s ease-in';
                 bomb.style.left = '150%'; 
-                
                 setTimeout(() => {
                     bomb.style.display = 'none';
                     isMyTurn = false;
                     status.innerText = "휴, 살았다!";
-                    socket.emit('throwBomb'); // 서버에 던졌다고 알림
+                    socket.emit('throwBomb'); 
                 }, 200);
-
             } else {
-                // 실패: 바닥으로 떨어짐 (레크리에이션 포인트)
                 status.innerText = "앗! 카드를 떨어뜨렸습니다!";
                 bomb.classList.add('dropped');
-                
-                // 페널티 시간 후 다시 줍기
                 setTimeout(() => {
                     bomb.classList.remove('dropped');
                     bomb.style.left = 'calc(50% - 75px)';
                     bomb.style.top = '50%';
                     status.innerText = "다시 주웠습니다! 빨리 던지세요!";
-                }, 1500); // 1.5초 페널티
+                }, 1500); 
             }
         });
 
         socket.on('explode', () => {
             if (isMyTurn) {
-                // 내가 폭탄을 들고 있을 때 터짐
-                status.innerText = "💥 으악! 내 폰에서 터졌다! (패배)";
+                status.innerText = "💥 으악! 내가 걸렸다! (벌칙 당첨)";
                 status.style.color = "#ff3333";
                 status.style.fontSize = "24px";
-                
                 bomb.style.backgroundColor = "black";
                 bomb.innerText = "💀";
                 bomb.classList.remove('grabbed', 'dropped');
@@ -131,7 +140,6 @@
                 bomb.style.top = '50%';
                 isDragging = false;
             } else {
-                // 다른 사람 폰에서 터졌을 때
                 status.innerText = "휴~ 누군가 터졌습니다!";
                 bomb.style.display = 'none';
             }
