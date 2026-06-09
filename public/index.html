@@ -3,7 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>에어 카드 패스 - 플레이어</title>
+    <title>에어 카드 패스 - 플레이어 (핸드 트래킹 적용)</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
     <style>
         body { margin: 0; overflow: hidden; background-color: #2c3e50; touch-action: none; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; }
         
@@ -21,15 +27,32 @@
             display: flex; justify-content: center; align-items: center;
             color: white; font-size: 24px; font-weight: bold;
             z-index: 10;
-            cursor: grab; /* PC에서 마우스를 올렸을 때 손바닥 모양 띄우기 */
+            cursor: grab;
         }
-        #bomb:active { cursor: grabbing; } /* 마우스로 잡았을 때 꽉 쥔 손 모양 */
+        #bomb:active { cursor: grabbing; }
         
         .grabbed { transform: scale(0.9); box-shadow: 0 5px 10px rgba(0,0,0,0.3) !important; }
         .dropped { transition: top 0.5s ease-in !important; top: 120% !important; }
+
+        /* 웹캠 화면 스타일 (우측 상단) */
+        #webcam {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 160px;
+            height: 120px;
+            border-radius: 10px;
+            z-index: 50;
+            transform: scaleX(-1); /* 거울 모드 */
+            border: 3px solid #f1c40f;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            background-color: #000;
+        }
     </style>
 </head>
 <body>
+
+    <video id="webcam" autoplay playsinline></video>
 
     <div id="loginScreen">
         <h1 style="color: white; margin-bottom: 30px;">에어 카드 패스 💣</h1>
@@ -49,17 +72,20 @@
         const loginScreen = document.getElementById('loginScreen');
         const nicknameInput = document.getElementById('nicknameInput');
         const joinBtn = document.getElementById('joinBtn');
+        const videoElement = document.getElementById('webcam');
 
         let isDragging = false;
         let startX, currentX, startTime;
         let isMyTurn = false;
 
+        // 입장 버튼 로직
         joinBtn.addEventListener('click', () => {
             const nickname = nicknameInput.value.trim();
             if(nickname) {
                 socket.emit('setNickname', nickname);
                 loginScreen.style.display = 'none'; 
                 status.innerText = `${nickname}님, 대기 중...`;
+                startCamera(); // 입장 후 카메라 실행
             } else {
                 alert("이름을 꼭 입력해주세요!");
             }
@@ -67,7 +93,7 @@
 
         socket.on('receiveBomb', () => {
             isMyTurn = true;
-            status.innerText = "빨리 옆으로 던지세요!";
+            status.innerText = "빨리 옆으로 던지세요! (손으로 꼬집어서 스와이프!)";
             status.style.color = "white";
             bomb.style.backgroundColor = "";
             bomb.innerText = "💣 폭탄";
@@ -82,12 +108,13 @@
             }, 10);
         });
 
-        // 🟢 마우스 & 터치 공통 좌표 추출 함수
+        // ----------------------------------------------------
+        // [1] 마우스 & 터치 드래그 로직 (기존 로직 유지)
+        // ----------------------------------------------------
         function getClientX(e) {
             return e.touches ? e.touches[0].clientX : e.clientX;
         }
 
-        // 🟢 잡기 시작 (Touch Start & Mouse Down)
         function handleStart(e) {
             if (!isMyTurn) return;
             isDragging = true;
@@ -97,7 +124,6 @@
             startTime = Date.now();
         }
 
-        // 🟢 드래그 중 (Touch Move & Mouse Move)
         function handleMove(e) {
             if (!isDragging) return;
             currentX = getClientX(e);
@@ -105,21 +131,103 @@
             bomb.style.left = `calc(50% - 75px + ${moveX}px)`;
         }
 
-        // 🟢 놓기 (Touch End & Mouse Up)
         function handleEnd(e) {
             if (!isDragging) return;
+            processThrow();
+        }
+
+        bomb.addEventListener('touchstart', handleStart, {passive: false});
+        bomb.addEventListener('touchmove', handleMove, {passive: false});
+        bomb.addEventListener('touchend', handleEnd);
+        bomb.addEventListener('mousedown', handleStart);
+        window.addEventListener('mousemove', handleMove);
+        window.addEventListener('mouseup', handleEnd);
+
+        // ----------------------------------------------------
+        // [2] 핸드 트래킹 (MediaPipe) 로직
+        // ----------------------------------------------------
+        function getDistance(point1, point2) {
+            // 두 랜드마크(점) 사이의 유클리디안 거리 계산
+            return Math.sqrt(Math.pow(point1.x - point2.x, 2) + Math.pow(point1.y - point2.y, 2));
+        }
+
+        function startCamera() {
+            const hands = new Hands({locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            }});
+
+            hands.setOptions({
+                maxNumHands: 1, // 연산량 최적화를 위해 한 손만 인식
+                modelComplexity: 1,
+                minDetectionConfidence: 0.7,
+                minTrackingConfidence: 0.7
+            });
+
+            hands.onResults((results) => {
+                if (!isMyTurn) return;
+
+                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                    const landmarks = results.multiHandLandmarks[0];
+                    
+                    // 4번: 엄지 끝, 8번: 검지 끝
+                    const thumbTip = landmarks[4];
+                    const indexTip = landmarks[8];
+                    
+                    // 거울 모드이므로 방향 반전 처리
+                    const trackedX = (1 - indexTip.x) * window.innerWidth;
+                    
+                    // 엄지와 검지 사이의 거리 (0.06 미만이면 꼬집은 것으로 판정)
+                    const pinchDistance = getDistance(thumbTip, indexTip);
+                    const isPinching = pinchDistance < 0.06;
+
+                    if (isPinching && !isDragging) {
+                        // 🟢 잡기 시작 (허공에서 꼬집음)
+                        isDragging = true;
+                        bomb.classList.add('grabbed');
+                        bomb.style.transition = 'none';
+                        startX = trackedX;
+                        startTime = Date.now();
+                    } 
+                    else if (isPinching && isDragging) {
+                        // 🟢 드래그 중 (꼬집은 상태로 이동)
+                        currentX = trackedX;
+                        // 민감도를 높이기 위해 이동량에 1.5배 가중치 부여
+                        let moveX = (currentX - startX) * 1.5; 
+                        bomb.style.left = `calc(50% - 75px + ${moveX}px)`;
+                    } 
+                    else if (!isPinching && isDragging) {
+                        // 🟢 놓기 (손가락을 폄)
+                        processThrow();
+                    }
+                }
+            });
+
+            const camera = new Camera(videoElement, {
+                onFrame: async () => {
+                    await hands.send({image: videoElement});
+                },
+                width: 640,
+                height: 480
+            });
+            camera.start();
+        }
+
+        // ----------------------------------------------------
+        // [3] 공통 던지기 판정 로직
+        // ----------------------------------------------------
+        function processThrow() {
             isDragging = false;
             bomb.classList.remove('grabbed');
 
             let endTime = Date.now();
-            // click 이벤트만 발생하고 움직이지 않았을 경우 방어 코드
             if(currentX === undefined) currentX = startX; 
             
             let distanceX = currentX - startX;
             let timeElapsed = endTime - startTime;
             let velocityX = distanceX / timeElapsed; 
 
-            if (velocityX > 0.5 && distanceX > 80) {
+            // 던지기 판정: 마우스와 손 인식의 감도 차이를 커버할 수 있도록 설정
+            if (velocityX > 0.4 && distanceX > 50) {
                 bomb.style.transition = 'left 0.2s ease-in';
                 bomb.style.left = '150%'; 
                 setTimeout(() => {
@@ -138,20 +246,10 @@
                     status.innerText = "다시 주웠습니다! 빨리 던지세요!";
                 }, 1500); 
             }
-            // 변수 초기화
             currentX = undefined;
         }
 
-        // 스마트폰 터치 이벤트
-        bomb.addEventListener('touchstart', handleStart, {passive: false});
-        bomb.addEventListener('touchmove', handleMove, {passive: false});
-        bomb.addEventListener('touchend', handleEnd);
-
-        // PC 마우스 이벤트 추가
-        bomb.addEventListener('mousedown', handleStart);
-        window.addEventListener('mousemove', handleMove); // 마우스가 화면 밖으로 나가도 인식되게 window에 적용
-        window.addEventListener('mouseup', handleEnd);
-
+        // 폭발 로직
         socket.on('explode', () => {
             if (isMyTurn) {
                 status.innerText = "💥 으악! 내가 걸렸다! (벌칙 당첨)";
@@ -169,3 +267,5 @@
             }
         });
     </script>
+</body>
+</html>
