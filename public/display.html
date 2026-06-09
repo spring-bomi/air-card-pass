@@ -13,7 +13,6 @@
 
         #timer { font-size: 15rem; font-weight: bold; transition: color 0.5s ease, transform 0.5s ease; margin-top: 50px; }
         
-        /* ⭐ 완전히 사라지지 않고 반투명한 노란색으로 변하도록 수정 */
         .blind { opacity: 0.5; color: #f1c40f; text-shadow: 0 0 20px #f1c40f; } 
         .danger { opacity: 1 !important; color: #ff3333; transform: scale(1.2); } 
         
@@ -55,8 +54,15 @@
             startBtn.style.display = 'none';
         });
 
+        // 🟢 [추가] 3, 2, 1 카운트다운 표시
+        socket.on('preCountdown', (count) => {
+            timerDiv.innerText = count;
+            timerDiv.style.fontSize = "15rem";
+            timerDiv.style.color = "#f1c40f";
+            timerDiv.classList.remove('blind', 'danger');
+        });
+
         socket.on('timerUpdate', (timeLeft) => {
-            // ⭐ 타이머 업데이트 로직 수정: 블라인드 구간일 때 물음표 표시
             if (timeLeft <= 25 && timeLeft > 3) {
                 timerDiv.innerText = "???";
                 timerDiv.classList.add('blind');
