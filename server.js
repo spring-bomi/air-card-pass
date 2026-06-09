@@ -71,14 +71,17 @@ io.on('connection', (socket) => {
 
         const realPlayers = players.filter(id => playerNames[id] !== 'DISPLAY' && playerNames[id] !== '대기중...');
         
+        // 🎲 [랜덤 이동 로직 적용] 🎲
         if (realPlayers.length > 1) {
-            let currentIndex = realPlayers.indexOf(currentBombHolder);
-            if (currentIndex === -1) currentIndex = 0; 
+            // 현재 폭탄을 든 사람을 제외한 타겟 리스트 생성
+            const availableTargets = realPlayers.filter(id => id !== currentBombHolder);
+            // 타겟 리스트 중 랜덤으로 한 명 선택
+            const randomIndex = Math.floor(Math.random() * availableTargets.length);
+            currentBombHolder = availableTargets[randomIndex]; 
             
-            let nextIndex = (currentIndex + 1) % realPlayers.length;
-            currentBombHolder = realPlayers[nextIndex]; 
             io.to(currentBombHolder).emit('receiveBomb');
         } else if (realPlayers.length === 1) {
+            // 혼자 남았을 때는 자기 자신에게 다시 전달
             io.to(currentBombHolder).emit('receiveBomb');
         }
     });
