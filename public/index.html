@@ -62,7 +62,7 @@
         let isDragging = false;
         let startX, currentX, startTime;
         let isMyTurn = false;
-        let isExploded = false; // ⭐ 조작 잠금 변수
+        let isExploded = false; 
 
         joinBtn.addEventListener('click', () => {
             const nickname = nicknameInput.value.trim();
@@ -76,14 +76,26 @@
             }
         });
 
-        // 🟢 [추가] 시작 전 카운트다운
+        // 🟢 [수정됨] 시작 전 카운트다운 및 타인 폭탄 소지 판별
         socket.on('preCountdown', (count) => {
             status.innerText = `🚨 게임 시작 ${count}초 전! 🚨`;
             status.style.color = "#f1c40f";
             status.style.fontSize = "24px";
-            bomb.style.display = 'none'; // 카운트다운 동안 아무것도 안 보이게
+            bomb.style.display = 'none'; 
             isMyTurn = false;
             isExploded = false;
+
+            // ⭐ 카운트다운이 1초 남았을 때 예약 작업 설정
+            if (count === 1) {
+                setTimeout(() => {
+                    // 1.2초 뒤(게임이 시작된 직후)에도 나한테 폭탄이 안 들어왔다면
+                    if (!isMyTurn && !isExploded) {
+                        status.innerText = "👀 다른 누군가에게 폭탄이 있습니다...";
+                        status.style.color = "#bdc3c7";
+                        status.style.fontSize = "20px";
+                    }
+                }, 1200); 
+            }
         });
 
         socket.on('receiveBomb', () => {
@@ -108,7 +120,7 @@
         function getClientX(e) { return e.touches ? e.touches[0].clientX : e.clientX; }
 
         function handleStart(e) {
-            if (!isMyTurn || isExploded) return; // ⭐ 터지면 즉시 조작 차단
+            if (!isMyTurn || isExploded) return; 
             isDragging = true;
             bomb.classList.add('grabbed');
             bomb.style.transition = 'none'; 
@@ -152,7 +164,7 @@
             });
 
             hands.onResults((results) => {
-                if (!isMyTurn || isExploded) return; // ⭐ 손 인식도 터지면 차단
+                if (!isMyTurn || isExploded) return; 
 
                 if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                     const landmarks = results.multiHandLandmarks[0];
@@ -204,7 +216,9 @@
                 setTimeout(() => {
                     bomb.style.display = 'none';
                     isMyTurn = false;
-                    status.innerText = "휴, 살았다!";
+                    // ⭐ 폭탄을 성공적으로 넘겼을 때도 동일한 문구 적용
+                    status.innerText = "👀 다른 누군가에게 폭탄이 있습니다...";
+                    status.style.color = "#bdc3c7";
                     socket.emit('throwBomb'); 
                 }, 200);
             } else {
@@ -221,7 +235,7 @@
         }
 
         socket.on('explode', () => {
-            isExploded = true; // ⭐ 조작 잠금 활성화
+            isExploded = true; 
             if (isMyTurn) {
                 status.innerText = "💥 으악! 내가 걸렸다! (벌칙 당첨)";
                 status.style.color = "#ff3333";
@@ -233,7 +247,7 @@
                 bomb.style.top = '50%';
                 
                 isDragging = false;
-                isMyTurn = false; // ⭐ 내 턴 상태를 해제하여 더 이상 드래그 불가능하게 만듦
+                isMyTurn = false; 
             } else {
                 status.innerText = "휴~ 누군가 터졌습니다!";
                 bomb.style.display = 'none';
