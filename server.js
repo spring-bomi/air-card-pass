@@ -40,7 +40,6 @@ io.on('connection', (socket) => {
         
         if (timerInterval) clearInterval(timerInterval);
 
-        // 🟢 [추가] 3, 2, 1 카운트다운 로직
         let preCount = 3;
         io.emit('preCountdown', preCount); 
 
@@ -51,12 +50,13 @@ io.on('connection', (socket) => {
             } else {
                 clearInterval(preInterval);
                 
-                // 카운트다운 종료 후 진짜 게임 시작
                 let timeLeft = 30; 
                 const realPlayers = players.filter(id => playerNames[id] !== 'DISPLAY' && playerNames[id] !== '대기중...');
 
                 if (realPlayers.length > 0) {
-                    currentBombHolder = realPlayers[0]; 
+                    // ⭐ [변경됨] 첫 번째 폭탄 소지자도 랜덤으로 선택!
+                    const randomIndex = Math.floor(Math.random() * realPlayers.length);
+                    currentBombHolder = realPlayers[randomIndex]; 
                     io.to(currentBombHolder).emit('receiveBomb');
                 }
 
@@ -107,7 +107,9 @@ io.on('connection', (socket) => {
         if (isPlaying && wasBombHolder && timerInterval) { 
             const realPlayers = players.filter(id => playerNames[id] !== 'DISPLAY' && playerNames[id] !== '대기중...');
             if (realPlayers.length > 0) {
-                currentBombHolder = realPlayers[0]; 
+                // ⭐ [변경됨] 폭탄을 든 사람이 도망갔을 때도 남은 사람 중 랜덤으로 할당!
+                const randomIndex = Math.floor(Math.random() * realPlayers.length);
+                currentBombHolder = realPlayers[randomIndex]; 
                 io.to(currentBombHolder).emit('receiveBomb');
             } else {
                 currentBombHolder = null;
