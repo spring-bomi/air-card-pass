@@ -13,7 +13,7 @@ let playerNames = {};
 let currentBombHolder = null; 
 let timerInterval = null;
 let lastThrowTime = 0; 
-let isPlaying = false; // ⭐ [핵심 방어막] 게임 진행 상태를 잠그는 변수 추가
+let isPlaying = false; 
 
 io.on('connection', (socket) => {
     players.push(socket.id);
@@ -35,34 +35,50 @@ io.on('connection', (socket) => {
     }
 
     socket.on('startGame', () => {
-        if (players.length === 0) return; 
-        let timeLeft = 30; 
-        isPlaying = true; // ⭐ 게임 시작 시 자물쇠 해제!
+        if (players.length === 0 || isPlaying) return; 
+        isPlaying = true; 
         
-        const realPlayers = players.filter(id => playerNames[id] !== 'DISPLAY' && playerNames[id] !== '대기중...');
-
-        if (realPlayers.length > 0) {
-            currentBombHolder = realPlayers[0]; 
-            io.to(currentBombHolder).emit('receiveBomb');
-        }
-
         if (timerInterval) clearInterval(timerInterval);
-        
-        timerInterval = setInterval(() => {
-            timeLeft--;
-            io.emit('timerUpdate', timeLeft);
 
-            if (timeLeft <= 0) {
-                clearInterval(timerInterval);
-                isPlaying = false; // ⭐ 0초가 되는 순간 자물쇠 철컥! (이후 조작 불가)
-                io.emit('explode'); 
-                currentBombHolder = null; 
+        // 🟢 [추가] 3, 2, 1 카운트다운 로직
+        let preCount = 3;
+        io.emit('preCountdown', preCount); 
+
+        const preInterval = setInterval(() => {
+            preCount--;
+            if (preCount > 0) {
+                io.emit('preCountdown', preCount);
+            } else {
+                clearInterval(preInterval);
+                
+                // 카운트다운 종료 후 진짜 게임 시작
+                let timeLeft = 30; 
+                const realPlayers = players.filter(id => playerNames[id] !== 'DISPLAY' && playerNames[id] !== '대기중...');
+
+                if (realPlayers.length > 0) {
+                    currentBombHolder = realPlayers[0]; 
+                    io.to(currentBombHolder).emit('receiveBomb');
+                }
+
+                io.emit('timerUpdate', timeLeft);
+
+                timerInterval = setInterval(() => {
+                    timeLeft--;
+                    io.emit('timerUpdate', timeLeft);
+
+                    if (timeLeft <= 0) {
+                        clearInterval(timerInterval);
+                        isPlaying = false; 
+                        io.emit('explode'); 
+                        currentBombHolder = null; 
+                    }
+                }, 1000);
             }
         }, 1000);
     });
 
     socket.on('throwBomb', () => {
-        if (!isPlaying) return; // ⭐ [핵심 방어 1] 터진 이후에는 던지기 신호 무조건 무시!
+        if (!isPlaying) return; 
         if (socket.id !== currentBombHolder) return; 
 
         const now = Date.now();
@@ -71,17 +87,12 @@ io.on('connection', (socket) => {
 
         const realPlayers = players.filter(id => playerNames[id] !== 'DISPLAY' && playerNames[id] !== '대기중...');
         
-        // 🎲 [랜덤 이동 로직 적용] 🎲
         if (realPlayers.length > 1) {
-            // 현재 폭탄을 든 사람을 제외한 타겟 리스트 생성
             const availableTargets = realPlayers.filter(id => id !== currentBombHolder);
-            // 타겟 리스트 중 랜덤으로 한 명 선택
             const randomIndex = Math.floor(Math.random() * availableTargets.length);
             currentBombHolder = availableTargets[randomIndex]; 
-            
             io.to(currentBombHolder).emit('receiveBomb');
         } else if (realPlayers.length === 1) {
-            // 혼자 남았을 때는 자기 자신에게 다시 전달
             io.to(currentBombHolder).emit('receiveBomb');
         }
     });
@@ -93,7 +104,7 @@ io.on('connection', (socket) => {
         delete playerNames[socket.id];
         broadcastPlayerList(); 
 
-        if (isPlaying && wasBombHolder && timerInterval) { // ⭐ 게임 진행 중일 때만 강제 할당
+        if (isPlaying && wasBombHolder && timerInterval) { 
             const realPlayers = players.filter(id => playerNames[id] !== 'DISPLAY' && playerNames[id] !== '대기중...');
             if (realPlayers.length > 0) {
                 currentBombHolder = realPlayers[0]; 
